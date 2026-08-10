@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "semi": true,
+  "singleQuote": true,
+  "sortImports": {
+    "internalPattern": ["$app/", "$env/", "$lib/"],
+    "newlinesBetween": true,
+    "sortSideEffects": false
+  },
+  "sortPackageJson": true,
+  "svelte": true,
+  "trailingComma": "all"
+}

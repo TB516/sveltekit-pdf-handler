@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "perf": "warn",
+    "suspicious": "error"
+  },
+  "ignorePatterns": ["dist/**"],
+  "options": {
+    "reportUnusedDisableDirectives": "error"
+  },
+  "plugins": ["import", "oxc", "typescript", "unicorn"],
+  "rules": {
+    "eqeqeq": "error",
+    "no-console": "warn",
+    "no-debugger": "error",
+    "no-duplicate-imports": "error",
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "fixStyle": "separate-type-imports",
+        "prefer": "type-imports"
+      }
+    ]
+  }
+}
