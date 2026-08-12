@@ -1,9 +1,11 @@
 {
   "name": "sveltekit-pdf",
   "version": "0.0.0",
-  "description": "Render SvelteKit pages ending in .pdf as PDF responses.",
+  "description": "Render Svelte components as PDF responses from SvelteKit endpoints.",
+  "license": "BSD-3-Clause",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "type": "module",
   "exports": {
@@ -17,6 +19,9 @@
     "check": "tsc --noEmit",
     "format": "oxfmt .",
     "lint": "oxlint ."
+  },
+  "dependencies": {
+    "puppeteer": "^25.5.0"
   },
   "devDependencies": {
     "oxfmt": "^0.62.0",
