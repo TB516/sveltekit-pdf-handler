@@ -1,0 +1,31 @@
+name: Publish package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up tools
+        uses: jdx/mise-action@v3
+        with:
+          cache: false
+
+      - name: Verify release version
+        run: test "${GITHUB_REF_NAME}" = "v$(node --print "require('./package.json').version")"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish to npm
+        run: npm publish
