@@ -31,7 +31,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node scripts/clean.ts && tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
