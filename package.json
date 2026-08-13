@@ -1,8 +1,24 @@
 {
-  "name": "sveltekit-pdf",
-  "version": "0.0.0",
+  "name": "sveltekit-pdf-renderer",
+  "version": "0.1.0",
   "description": "Render Svelte components as PDF responses from SvelteKit endpoints.",
+  "keywords": [
+    "pdf",
+    "puppeteer",
+    "server-side-rendering",
+    "svelte",
+    "sveltekit"
+  ],
+  "homepage": "https://github.com/TB516/sveltekit-pdf-handler#readme",
+  "bugs": {
+    "url": "https://github.com/TB516/sveltekit-pdf-handler/issues"
+  },
   "license": "BSD-3-Clause",
+  "author": "TB516",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TB516/sveltekit-pdf-handler.git"
+  },
   "files": [
     "dist",
     "src"
@@ -18,7 +34,9 @@
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
     "format": "oxfmt .",
-    "lint": "oxlint ."
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint .",
+    "prepublishOnly": "pnpm format:check && pnpm lint && pnpm check && pnpm build"
   },
   "dependencies": {
     "puppeteer": "^25.5.0"

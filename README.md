@@ -1,4 +1,4 @@
-# sveltekit-pdf
+# sveltekit-pdf-renderer
 
 Render a server-side Svelte component as a PDF response from a SvelteKit endpoint.
 
@@ -12,7 +12,7 @@ Until the compiler integration is available, PDF components must opt into inject
 <svelte:options css="injected" />
 
 <script module lang="ts">
-  import type { PdfConfig } from 'sveltekit-pdf';
+  import type { PdfConfig } from 'sveltekit-pdf-renderer';
   import regular from './fonts/XCharter-Regular.woff2?inline';
 
   export const pdf = {
@@ -55,11 +55,11 @@ normal `Response`, the endpoint can perform any loading or guards before renderi
 ```ts
 // src/routes/resume.pdf/+server.ts
 import type { RequestHandler } from './$types';
-import { createPdfResponse } from 'sveltekit-pdf';
+import { createPdfResponse } from 'sveltekit-pdf-renderer';
 import * as ResumeModule from './Resume.svelte';
 
 export const GET: RequestHandler = async (event) => {
-  const name = event.url.searchParams.get('name') ?? 'Thomas Berrios';
+  const name = event.url.searchParams.get('name') ?? 'TB516';
 
   return createPdfResponse(event, ResumeModule, {
     props: { name },
