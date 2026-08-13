@@ -1,11 +1,20 @@
 import type { RequestEvent } from '@sveltejs/kit';
-import type { HTTPRequest, PDFOptions } from 'puppeteer';
+import type { Browser, HTTPRequest, PDFOptions } from 'puppeteer';
 
-import { createBrowserSession } from './browser.js';
-
+/**
+ * Provides the browser, request, document, and PDF options used for one render.
+ */
 interface PdfRenderOptions {
+  /** Browser in which an isolated context is created. */
+  browser: Browser;
+
+  /** Current SvelteKit request event used to load same-origin assets. */
   event: RequestEvent;
+
+  /** Complete HTML document loaded by Chromium. */
   html: string;
+
+  /** Puppeteer options used to generate the PDF. */
   pdfOptions: Omit<PDFOptions, 'path'> | undefined;
 }
 
@@ -16,11 +25,12 @@ interface PdfRenderOptions {
  * @returns The generated PDF bytes.
  */
 export const renderPdf = async ({
+  browser,
   event,
   html,
   pdfOptions,
 }: PdfRenderOptions): Promise<Uint8Array> => {
-  const { context, page } = await createBrowserSession();
+  const context = await browser.createBrowserContext();
   let assetError: unknown;
 
   /**
@@ -52,6 +62,7 @@ export const renderPdf = async ({
   };
 
   try {
+    const page = await context.newPage();
     await page.setRequestInterception(true);
     page.on('request', handleAssetRequest);
 

@@ -1,10 +1,22 @@
 import type { PdfFont } from './types.js';
 
+/**
+ * Provides the content and metadata used to construct a PDF document's HTML.
+ */
 interface PdfHtmlOptions {
+  /** Base URL used to resolve relative document assets. */
   baseUrl: URL;
+
+  /** Rendered Svelte body markup. */
   body: string;
+
+  /** Font faces inserted into the document. */
   fonts: readonly PdfFont[];
+
+  /** Rendered Svelte head markup. */
   head: string;
+
+  /** Optional language placed on the document's `<html>` element. */
   lang: string | undefined;
 }
 

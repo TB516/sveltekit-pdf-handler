@@ -1,4 +1,4 @@
-export { createPdfResponse } from './pdf.js';
+export { createPdfResponder, type PdfResponder } from './pdf.js';
 export type {
   PdfComponentModule,
   PdfComponentProps,
