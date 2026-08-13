@@ -2,13 +2,31 @@
 
 Render a server-side Svelte component as a PDF response from a SvelteKit endpoint.
 
+> [!WARNING]
+> This project is still under active development. Its public API may change between releases until
+> it reaches a stable version.
+
+## Installation
+
+```sh
+pnpm add sveltekit-pdf-renderer
+```
+
+This package requires Svelte 5, SvelteKit 2, and Node.js 22.12 or newer.
+
+Puppeteer downloads a compatible browser during installation. If your package manager blocks
+dependency install scripts, follow Puppeteer's guidance for
+[installing a browser manually](https://pptr.dev/troubleshooting#blocked-install-scripts).
+
 ## Usage
 
-Until the compiler integration is available, PDF components must opt into injected CSS so that
-`render()` includes their styles:
+> [!NOTE]
+> Until compiler integration is available, PDF components must opt into injected CSS so that
+> `render()` includes their styles.
+
+`src/routes/resume.pdf/Resume.svelte`
 
 ```svelte
-<!-- src/routes/resume.pdf/Resume.svelte -->
 <svelte:options css="injected" />
 
 <script module lang="ts">
@@ -53,8 +71,13 @@ Create a responder at module scope, then pass it the request event and complete 
 Because the responder returns a normal `Response`, the endpoint can perform any loading or guards
 before rendering the PDF:
 
+> [!IMPORTANT]
+> Keep responders in server-only modules, such as route server files or `$lib/server`, so Puppeteer
+> is never included in a client bundle.
+
+`src/routes/resume.pdf/+server.ts`
+
 ```ts
-// src/routes/resume.pdf/+server.ts
 import type { RequestHandler } from './$types';
 import { createPdfResponder } from 'sveltekit-pdf-renderer';
 import * as ResumeModule from './Resume.svelte';
@@ -70,32 +93,44 @@ export const GET: RequestHandler = async (event) => {
 };
 ```
 
-This example generates the PDF for each request with a server adapter.
-
 Every call through the same responder function reuses one Chromium process. Each render receives a
 separate browser context and page, so request storage is isolated. Chromium exits with the SvelteKit
 prerender worker or server process; no browser lifecycle management is required.
 
-### CI
+PDF endpoints work with server adapters and static deployments. For a static deployment, prerender
+the endpoint so PDFs are generated at build time. A compatible browser must be available wherever
+generation runs, whether that is the build environment or the deployed server.
 
-Some Linux CI environments cannot run Chromium's sandbox. For example, Puppeteer's downloaded
-Chrome for Testing binary can encounter Ubuntu 24.04's AppArmor user-namespace restrictions on a
-GitHub Actions `ubuntu-latest` runner. Create a configured responder once in a server-only module in
-that case:
+## API
+
+### `createPdfResponder(options?: LaunchOptions): PdfResponder`
+
+Creates a responder backed by one lazily launched browser. Calls through the same responder reuse
+that browser while receiving isolated browser contexts and pages. Calling `createPdfResponder`
+again creates a separate browser scope.
+
+The optional argument is passed directly to Puppeteer. See Puppeteer's
+[`LaunchOptions`](https://pptr.dev/api/puppeteer.launchoptions) documentation for all available
+settings.
+
+## Browser configuration
+
+Pass Puppeteer launch options to `createPdfResponder`. For example, a CI environment that requires
+Chromium to run without its sandbox can use a shared server-only module:
+
+`src/lib/server/pdf.ts`
 
 ```ts
-// src/lib/server/pdf.ts
 import { createPdfResponder } from 'sveltekit-pdf-renderer';
 
 export const createPdfResponse = createPdfResponder({
-  args: Deno.env.get('CI') === 'true' ? ['--no-sandbox'] : [],
+  args: process.env.CI === 'true' ? ['--no-sandbox'] : [],
 });
 ```
 
-Import that configured `createPdfResponse` function in each endpoint. Every call through the same
-function reuses its Chromium process while receiving an isolated browser context and page. Calling
-`createPdfResponder` again creates a separate browser scope. The factory also accepts other Puppeteer
-launch options such as `executablePath`.
+Import this `createPdfResponse` function wherever PDFs are generated. Options such as
+`executablePath` are passed directly to Puppeteer.
 
-Disabling the sandbox reduces Chromium's process isolation. Only pass `--no-sandbox` when the
-environment requires it and the rendered documents and assets are trusted.
+> [!WARNING]
+> Disabling the sandbox reduces Chromium's process isolation. Only pass `--no-sandbox` when the
+> environment requires it and the rendered documents and assets are trusted.
