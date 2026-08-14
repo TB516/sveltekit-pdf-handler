@@ -1,8 +1,10 @@
 import type { RequestEvent } from '@sveltejs/kit';
+import { Effect } from 'effect';
 import { launch, type Browser, type LaunchOptions } from 'puppeteer';
 import type { Component } from 'svelte';
 import { render } from 'svelte/server';
 
+import { BrowserLaunchError, ComponentRenderError } from './errors.js';
 import { createPdfHtml } from './html.js';
 import { renderPdf } from './render.js';
 import type {
@@ -47,31 +49,46 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
    *
    * @returns The connected browser shared by this responder.
    */
-  const getBrowser = async (): Promise<Browser> => {
-    if (browserPromise !== undefined) {
-      return browserPromise;
-    }
+  const getBrowser: Effect.Effect<Browser, BrowserLaunchError> = Effect.suspend(() => {
+    const pendingBrowser = browserPromise;
 
-    const launchPromise = launch(launchOptions);
-    browserPromise = launchPromise;
-
-    try {
-      const browser = await launchPromise;
-      browser.once('disconnected', () => {
-        if (browserPromise === launchPromise) {
-          browserPromise = undefined;
-        }
+    if (pendingBrowser !== undefined) {
+      return Effect.tryPromise({
+        try: () => pendingBrowser,
+        catch: (cause) => new BrowserLaunchError({ cause }),
       });
-      return browser;
-    } catch (error) {
-      if (browserPromise === launchPromise) {
-        browserPromise = undefined;
-      }
-      throw error;
     }
-  };
 
-  return async <ComponentType extends Component>(
+    let launchPromise: Promise<Browser>;
+
+    return Effect.tryPromise({
+      try: () => {
+        launchPromise = launch(launchOptions);
+        browserPromise = launchPromise;
+        return launchPromise;
+      },
+      catch: (cause) => new BrowserLaunchError({ cause }),
+    }).pipe(
+      Effect.tap((browser) =>
+        Effect.sync(() => {
+          browser.once('disconnected', () => {
+            if (browserPromise === launchPromise) {
+              browserPromise = undefined;
+            }
+          });
+        }),
+      ),
+      Effect.onError(() =>
+        Effect.sync(() => {
+          if (browserPromise === launchPromise) {
+            browserPromise = undefined;
+          }
+        }),
+      ),
+    );
+  });
+
+  return <ComponentType extends Component>(
     event: RequestEvent,
     componentModule: PdfComponentModule<ComponentType>,
     ...[options]: PdfResponseArgs<PdfComponentProps<ComponentType>>
@@ -84,27 +101,37 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
       response: options?.response,
     };
 
-    const props = options?.props ?? {};
-    const { body, head } = await render(component as Component, { props });
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const props = options?.props ?? {};
 
-    const html = createPdfHtml({
-      baseUrl: event.url,
-      body,
-      fonts: resolvedOptions.fonts,
-      head,
-      lang: resolvedOptions.lang,
-    });
+        const { body, head } = yield* Effect.try({
+          try: () => render(component as Component, { props }),
+          catch: (cause) => new ComponentRenderError({ cause }),
+        });
 
-    const pdfBytes = await renderPdf({
-      browser: await getBrowser(),
-      event,
-      html,
-      pdfOptions: resolvedOptions.pdf,
-    });
+        const html = createPdfHtml({
+          baseUrl: event.url,
+          body,
+          fonts: resolvedOptions.fonts,
+          head,
+          lang: resolvedOptions.lang,
+        });
 
-    return new Response(Uint8Array.from(pdfBytes).buffer, {
-      headers: createPdfHeaders(resolvedOptions.response),
-    });
+        const browser = yield* getBrowser;
+
+        const pdfBytes = yield* renderPdf({
+          browser,
+          event,
+          html,
+          pdfOptions: resolvedOptions.pdf,
+        });
+
+        return new Response(Uint8Array.from(pdfBytes).buffer, {
+          headers: createPdfHeaders(resolvedOptions.response),
+        });
+      }),
+    );
   };
 };
 

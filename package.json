@@ -36,12 +36,15 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
+    "prepare": "effect-language-service patch",
     "prepublishOnly": "pnpm format:check && pnpm lint && pnpm check && pnpm build"
   },
   "dependencies": {
+    "effect": "4.0.0-rc.108",
     "puppeteer": "^25.5.0"
   },
   "devDependencies": {
+    "@effect/language-service": "0.87.2",
     "oxfmt": "^0.62.0",
     "oxlint": "1.77.0",
     "typescript": "^6.0.2"

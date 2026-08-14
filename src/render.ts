@@ -1,5 +1,8 @@
 import type { RequestEvent } from '@sveltejs/kit';
+import { Effect } from 'effect';
 import type { Browser, HTTPRequest, PDFOptions } from 'puppeteer';
+
+import { PdfRenderError } from './errors.js';
 
 /**
  * Provides the browser, request, document, and PDF options used for one render.
@@ -24,14 +27,13 @@ interface PdfRenderOptions {
  * @param options The request, HTML document, and Puppeteer options used for the render.
  * @returns The generated PDF bytes.
  */
-export const renderPdf = async ({
+export const renderPdf = ({
   browser,
   event,
   html,
   pdfOptions,
-}: PdfRenderOptions): Promise<Uint8Array> => {
-  const context = await browser.createBrowserContext();
-  let assetError: unknown;
+}: PdfRenderOptions): Effect.Effect<Uint8Array, PdfRenderError> => {
+  let assetError: PdfRenderError | undefined;
 
   /**
    * Loads an intercepted browser request through SvelteKit when it is same-origin.
@@ -39,49 +41,75 @@ export const renderPdf = async ({
    * @param request The intercepted Puppeteer request.
    * @returns A promise that resolves after the request is continued, fulfilled, or aborted.
    */
-  const handleAssetRequest = async (request: HTTPRequest): Promise<void> => {
-    try {
-      const requestUrl = new URL(request.url());
+  const handleAssetRequest = (request: HTTPRequest): Promise<void> =>
+    Effect.runPromise(
+      Effect.tryPromise({
+        try: async () => {
+          const requestUrl = new URL(request.url());
 
-      if (requestUrl.origin !== event.url.origin) {
-        await request.continue();
-        return;
-      }
+          if (requestUrl.origin !== event.url.origin) {
+            await request.continue();
+            return;
+          }
 
-      const assetResponse = await event.fetch(requestUrl);
+          const assetResponse = await event.fetch(requestUrl);
 
-      await request.respond({
-        status: assetResponse.status,
-        headers: prepareAssetResponseHeaders(assetResponse.headers),
-        body: new Uint8Array(await assetResponse.arrayBuffer()),
-      });
-    } catch (error) {
-      assetError ??= error;
-      await request.abort('failed').catch(() => undefined);
-    }
-  };
+          await request.respond({
+            status: assetResponse.status,
+            headers: prepareAssetResponseHeaders(assetResponse.headers),
+            body: new Uint8Array(await assetResponse.arrayBuffer()),
+          });
+        },
+        catch: (cause) => new PdfRenderError({ cause }),
+      }).pipe(
+        Effect.catchTag('PdfRenderError', (error) =>
+          Effect.gen(function* () {
+            assetError ??= error;
+            yield* Effect.ignore(
+              Effect.tryPromise({
+                try: () => request.abort('failed'),
+                catch: (cause) => new PdfRenderError({ cause }),
+              }),
+            );
+          }),
+        ),
+      ),
+    );
 
-  try {
-    const page = await context.newPage();
-    await page.setRequestInterception(true);
-    page.on('request', handleAssetRequest);
+  return Effect.acquireUseRelease(
+    Effect.tryPromise({
+      try: () => browser.createBrowserContext(),
+      catch: (cause) => new PdfRenderError({ cause }),
+    }),
+    (context) =>
+      Effect.tryPromise({
+        try: async () => {
+          const page = await context.newPage();
+          await page.setRequestInterception(true);
+          page.on('request', handleAssetRequest);
 
-    await page.setContent(html, { waitUntil: 'load' });
-    await page.waitForNetworkIdle();
-    await page.evaluate(() => document.fonts.ready);
+          await page.setContent(html, { waitUntil: 'load' });
+          await page.waitForNetworkIdle();
+          await page.evaluate(() => document.fonts.ready);
 
-    if (assetError !== undefined) {
-      throw assetError;
-    }
+          if (assetError !== undefined) {
+            throw assetError;
+          }
 
-    return await page.pdf({
-      printBackground: true,
-      preferCSSPageSize: true,
-      ...pdfOptions,
-    });
-  } finally {
-    await context.close();
-  }
+          return page.pdf({
+            printBackground: true,
+            preferCSSPageSize: true,
+            ...pdfOptions,
+          });
+        },
+        catch: (cause) => (cause instanceof PdfRenderError ? cause : new PdfRenderError({ cause })),
+      }),
+    (context) =>
+      Effect.tryPromise({
+        try: () => context.close(),
+        catch: (cause) => new PdfRenderError({ cause }),
+      }),
+  );
 };
 
 /**
