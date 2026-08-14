@@ -95,7 +95,7 @@ export const GET: RequestHandler = async (event) => {
 
 Every call through the same responder function reuses one Chromium process. Each render receives a
 separate browser context and page, so request storage is isolated. Chromium exits with the SvelteKit
-prerender worker or server process; no browser lifecycle management is required.
+prerender worker or server process, so normal usage does not require browser lifecycle management.
 
 PDF endpoints work with server adapters and static deployments. For a static deployment, prerender
 the endpoint so PDFs are generated at build time. A compatible browser must be available wherever
@@ -112,6 +112,24 @@ again creates a separate browser scope.
 The optional argument is passed directly to Puppeteer. See Puppeteer's
 [`LaunchOptions`](https://pptr.dev/api/puppeteer.launchoptions) documentation for all available
 settings.
+
+The returned responder also provides `dispose(): Promise<void>` and implements
+`Symbol.asyncDispose`. Disposal rejects new renders, waits for already accepted renders to settle,
+and then closes the responder's browser. It is safe to call more than once.
+
+To replace a responder without interrupting active requests, install the replacement before
+disposing the previous responder:
+
+```ts
+let createPdfResponse = createPdfResponder();
+
+const previous = createPdfResponse;
+createPdfResponse = createPdfResponder(newLaunchOptions);
+await previous.dispose();
+```
+
+A call made after disposal rejects with `PdfResponderDisposedError`. A browser close failure rejects
+disposal with `BrowserCloseError`.
 
 ## Browser configuration
 

@@ -1,10 +1,16 @@
 import type { RequestEvent } from '@sveltejs/kit';
-import { Effect } from 'effect';
+import { Cache, Duration, Effect, Exit, Option } from 'effect';
 import { launch, type Browser, type LaunchOptions } from 'puppeteer';
 import type { Component } from 'svelte';
 import { render } from 'svelte/server';
 
-import { BrowserLaunchError, ComponentRenderError } from './errors.js';
+import {
+  BrowserCloseError,
+  BrowserLaunchError,
+  ComponentRenderError,
+  PdfResponseError,
+  PdfResponderDisposedError,
+} from './errors.js';
 import { createPdfHtml } from './html.js';
 import { renderPdf } from './render.js';
 import type {
@@ -25,12 +31,37 @@ import type {
  * @param componentModule The Svelte component's complete module namespace.
  * @param args PDF options, component props, and response metadata.
  * @returns The generated PDF response.
+ * @throws {PdfResponderDisposedError} The responder has already been disposed.
+ * @throws {ComponentRenderError} Svelte could not render the component.
+ * @throws {BrowserLaunchError} Puppeteer could not launch Chromium.
+ * @throws {PdfRenderError} Puppeteer could not render the PDF document.
+ * @throws {PdfResponseError} The generated PDF response could not be created.
  */
-export type PdfResponder = <ComponentType extends Component>(
-  event: RequestEvent,
-  componentModule: PdfComponentModule<ComponentType>,
-  ...args: PdfResponseArgs<PdfComponentProps<ComponentType>>
-) => Promise<Response>;
+export interface PdfResponder {
+  <ComponentType extends Component>(
+    event: RequestEvent,
+    componentModule: PdfComponentModule<ComponentType>,
+    ...args: PdfResponseArgs<PdfComponentProps<ComponentType>>
+  ): Promise<Response>;
+
+  /**
+   * Waits for accepted renders to settle and then closes this responder's browser.
+   *
+   * Calling this method more than once returns the same disposal promise.
+   *
+   * @returns A promise that resolves when the responder has been disposed.
+   * @throws {BrowserCloseError} Puppeteer could not close Chromium.
+   */
+  dispose(): Promise<void>;
+
+  /**
+   * Asynchronously disposes this responder.
+   *
+   * @returns A promise that resolves when the responder has been disposed.
+   * @throws {BrowserCloseError} Puppeteer could not close Chromium.
+   */
+  [Symbol.asyncDispose](): Promise<void>;
+}
 
 /**
  * Creates a PDF responder backed by one lazily launched Chromium process.
@@ -42,57 +73,63 @@ export type PdfResponder = <ComponentType extends Component>(
  * @returns A configured PDF responder function.
  */
 export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfResponder => {
-  let browserPromise: Promise<Browser> | undefined;
+  const browserCacheKey = 'browser' as const;
+  const browserCache = Effect.runSync(
+    Cache.makeWith(
+      () =>
+        Effect.tryPromise({
+          try: () => launch(launchOptions),
+          catch: (cause) => new BrowserLaunchError({ cause }),
+        }),
+      {
+        capacity: 1,
+        timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
+      },
+    ),
+  );
+  const activeResponses = new Set<Promise<Response>>();
+  let disposed = false;
+  let disposalPromise: Promise<void> | undefined;
 
   /**
    * Returns the responder's browser, launching or relaunching it when needed.
    *
    * @returns The connected browser shared by this responder.
    */
-  const getBrowser: Effect.Effect<Browser, BrowserLaunchError> = Effect.suspend(() => {
-    const pendingBrowser = browserPromise;
+  const getBrowser: Effect.Effect<Browser, BrowserLaunchError> = Effect.gen(function* () {
+    const browser = yield* Cache.get(browserCache, browserCacheKey);
 
-    if (pendingBrowser !== undefined) {
-      return Effect.tryPromise({
-        try: () => pendingBrowser,
-        catch: (cause) => new BrowserLaunchError({ cause }),
-      });
+    if (browser.connected) {
+      return browser;
     }
 
-    let launchPromise: Promise<Browser>;
-
-    return Effect.tryPromise({
-      try: () => {
-        launchPromise = launch(launchOptions);
-        browserPromise = launchPromise;
-        return launchPromise;
-      },
-      catch: (cause) => new BrowserLaunchError({ cause }),
-    }).pipe(
-      Effect.tap((browser) =>
-        Effect.sync(() => {
-          browser.once('disconnected', () => {
-            if (browserPromise === launchPromise) {
-              browserPromise = undefined;
-            }
-          });
-        }),
-      ),
-      Effect.onError(() =>
-        Effect.sync(() => {
-          if (browserPromise === launchPromise) {
-            browserPromise = undefined;
-          }
-        }),
-      ),
+    const invalidated = yield* Cache.invalidateWhen(
+      browserCache,
+      browserCacheKey,
+      (cachedBrowser) => cachedBrowser === browser,
     );
+
+    if (invalidated) {
+      yield* Effect.ignore(
+        Effect.tryPromise({
+          try: () => browser.close(),
+          catch: (cause) => new BrowserCloseError({ cause }),
+        }),
+      );
+    }
+
+    return yield* Cache.get(browserCache, browserCacheKey);
   });
 
-  return <ComponentType extends Component>(
+  const responder = (<ComponentType extends Component>(
     event: RequestEvent,
     componentModule: PdfComponentModule<ComponentType>,
     ...[options]: PdfResponseArgs<PdfComponentProps<ComponentType>>
   ): Promise<Response> => {
+    if (disposed) {
+      return Effect.runPromise(Effect.fail(new PdfResponderDisposedError()));
+    }
+
     const component = componentModule.default;
     const resolvedOptions = {
       fonts: [...(componentModule.pdf?.fonts ?? []), ...(options?.fonts ?? [])],
@@ -101,7 +138,7 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
       response: options?.response,
     };
 
-    return Effect.runPromise(
+    const responsePromise = Effect.runPromise(
       Effect.gen(function* () {
         const props = options?.props ?? {};
 
@@ -127,12 +164,57 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
           pdfOptions: resolvedOptions.pdf,
         });
 
-        return new Response(Uint8Array.from(pdfBytes).buffer, {
-          headers: createPdfHeaders(resolvedOptions.response),
+        const headers = yield* createPdfHeaders(resolvedOptions.response);
+
+        return yield* Effect.try({
+          try: () =>
+            new Response(Uint8Array.from(pdfBytes).buffer, {
+              headers,
+            }),
+          catch: (cause) => new PdfResponseError({ cause }),
         });
       }),
     );
+
+    activeResponses.add(responsePromise);
+    void responsePromise.then(
+      () => activeResponses.delete(responsePromise),
+      () => activeResponses.delete(responsePromise),
+    );
+
+    return responsePromise;
+  }) as PdfResponder;
+
+  const dispose = (): Promise<void> => {
+    if (disposalPromise !== undefined) {
+      return disposalPromise;
+    }
+
+    disposed = true;
+    disposalPromise = Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.promise(() => Promise.allSettled(activeResponses));
+
+        const cachedBrowser = yield* Cache.getOption(browserCache, browserCacheKey);
+
+        if (Option.isSome(cachedBrowser)) {
+          yield* Effect.tryPromise({
+            try: () => cachedBrowser.value.close(),
+            catch: (cause) => new BrowserCloseError({ cause }),
+          }).pipe(Effect.ensuring(Cache.invalidate(browserCache, browserCacheKey)));
+        } else {
+          yield* Cache.invalidate(browserCache, browserCacheKey);
+        }
+      }),
+    );
+
+    return disposalPromise;
   };
+
+  responder.dispose = dispose;
+  responder[Symbol.asyncDispose] = dispose;
+
+  return responder;
 };
 
 /**
@@ -141,20 +223,28 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
  * @param options The configured response headers and content disposition.
  * @returns Headers for the PDF response.
  */
-const createPdfHeaders = (options: PdfResponseOptions | undefined): Headers => {
-  const headers = new Headers(options?.headers);
-  headers.set('content-type', 'application/pdf');
+const createPdfHeaders = (
+  options: PdfResponseOptions | undefined,
+): Effect.Effect<Headers, PdfResponseError> =>
+  Effect.gen(function* () {
+    const headers = yield* Effect.try({
+      try: () => new Headers(options?.headers),
+      catch: (cause) => new PdfResponseError({ cause }),
+    });
 
-  if (options?.disposition !== undefined) {
-    const filename =
-      options.filename === undefined
-        ? ''
-        : `; filename*=UTF-8''${encodeHeaderFilename(options.filename)}`;
-    headers.set('content-disposition', `${options.disposition}${filename}`);
-  }
+    headers.set('content-type', 'application/pdf');
 
-  return headers;
-};
+    if (options?.disposition !== undefined) {
+      const filename =
+        options.filename === undefined
+          ? ''
+          : `; filename*=UTF-8''${yield* encodeHeaderFilename(options.filename)}`;
+
+      headers.set('content-disposition', `${options.disposition}${filename}`);
+    }
+
+    return headers;
+  });
 
 /**
  * Encodes a filename for the UTF-8 Content-Disposition parameter.
@@ -162,10 +252,13 @@ const createPdfHeaders = (options: PdfResponseOptions | undefined): Headers => {
  * @param filename The unencoded response filename.
  * @returns The RFC 5987-compatible filename value.
  */
-const encodeHeaderFilename = (filename: string): string => {
-  return encodeURIComponent(filename)
-    .replaceAll("'", '%27')
-    .replaceAll('(', '%28')
-    .replaceAll(')', '%29')
-    .replaceAll('*', '%2A');
-};
+const encodeHeaderFilename = (filename: string): Effect.Effect<string, PdfResponseError> =>
+  Effect.try({
+    try: () =>
+      encodeURIComponent(filename)
+        .replaceAll("'", '%27')
+        .replaceAll('(', '%28')
+        .replaceAll(')', '%29')
+        .replaceAll('*', '%2A'),
+    catch: (cause) => new PdfResponseError({ cause }),
+  });
