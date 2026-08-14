@@ -12,9 +12,12 @@
   "plugins": ["import", "oxc", "typescript", "unicorn"],
   "rules": {
     "eqeqeq": "error",
+    "import/first": "error",
+    "import/no-cycle": "error",
+    "import/no-duplicates": "error",
     "no-console": "warn",
     "no-debugger": "error",
-    "no-duplicate-imports": "error",
+    "typescript/consistent-type-exports": "error",
     "typescript/consistent-type-imports": [
       "error",
       {
