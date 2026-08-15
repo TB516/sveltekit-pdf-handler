@@ -1,4 +1,4 @@
-import { Data } from 'effect';
+import { Data, type Schema } from 'effect';
 
 /** Indicates that Puppeteer could not launch Chromium. */
 export class BrowserLaunchError extends Data.TaggedError('BrowserLaunchError')<{
@@ -42,10 +42,16 @@ export class PdfResponseError extends Data.TaggedError('PdfResponseError')<{
   override readonly message = 'Failed to create the PDF response';
 }
 
+/** Indicates that configuration for one PDF generation is invalid. */
+export class PdfConfigError extends Data.TaggedError('PdfConfigError')<{
+  readonly cause: Schema.SchemaError;
+}> {
+  override readonly message = 'The PDF configuration is invalid';
+}
+
 /** Indicates that a PDF responder option is invalid. */
 export class PdfResponderConfigError extends Data.TaggedError('PdfResponderConfigError')<{
-  readonly option: 'renderTimeoutMs';
-  readonly value: number;
+  readonly cause: Schema.SchemaError;
 }> {
   override readonly message = 'The PDF responder configuration is invalid';
 }

@@ -9,7 +9,11 @@ export {
   PdfResponderConfigError,
   PdfResponderDisposedError,
 } from './errors.js';
-export { createPdfResponder, type PdfResponder } from './responder.js';
+export {
+  createPdfResponder,
+  type PdfGenerationError,
+  type PdfResponder,
+} from './core/responder.js';
 export type {
   PdfComponentModule,
   PdfComponentProps,

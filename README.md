@@ -111,8 +111,13 @@ again creates a separate browser scope.
 
 Pass Puppeteer launch settings through `options.launchOptions`. See Puppeteer's
 [`LaunchOptions`](https://pptr.dev/api/puppeteer.launchoptions) documentation for all available
-settings. Chromium PDF rendering has no timeout by default. Set `options.renderTimeoutMs` to a
-finite positive number to limit rendering in milliseconds.
+settings. Puppeteer applies its own timeouts to individual operations. Set
+`options.renderTimeoutMs` to a finite positive number to add an overall deadline, in milliseconds,
+for each PDF rendering operation.
+
+Set `options.maxConcurrentGenerations` to a positive integer to limit how many PDFs one responder
+generates at once. Additional calls wait for capacity and remain cancellable. Leaving it unset does
+not limit concurrency.
 
 The returned responder also provides `dispose(): Promise<void>` and implements
 `Symbol.asyncDispose`. Disposal rejects new renders, waits for already accepted renders to settle,
@@ -131,6 +136,31 @@ await previous.dispose();
 
 A call made after disposal rejects with `PdfResponderDisposedError`. A browser close failure rejects
 disposal with `BrowserCloseError`.
+
+### Effect API
+
+Import from `sveltekit-pdf-renderer/effect` to compose PDF generation directly with Effect and keep
+generation errors in the return type:
+
+```ts
+import { createPdfResponder } from 'sveltekit-pdf-renderer/effect';
+import { Effect } from 'effect';
+
+const program = Effect.gen(function* () {
+  const createPdfResponse = yield* createPdfResponder();
+
+  const response = yield* createPdfResponse(event, ResumeModule, {
+    props: { name: 'TB516' },
+  });
+
+  yield* createPdfResponse.dispose;
+
+  return response;
+});
+```
+
+The responder owns the same browser lifecycle as the standard API. Its factory, calls, and
+`dispose` property return composable Effect values instead of promises.
 
 ## Browser configuration
 

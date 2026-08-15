@@ -1,4 +1,4 @@
-import type { PdfFont } from './types.js';
+import type { PdfFont } from '../types.js';
 
 /**
  * Provides the content and metadata used to construct a PDF document's HTML.

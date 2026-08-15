@@ -1,64 +1,24 @@
 import type { LaunchOptions, PDFOptions } from 'puppeteer';
 import type { Component, ComponentProps } from 'svelte';
 
+import type { PdfFont, PdfResponseMetadata, ResponderConfig } from './core/config.js';
+
 /**
  * Configures a PDF responder and its shared browser.
  */
-export interface PdfResponderOptions {
+export interface PdfResponderOptions extends ResponderConfig {
   /** Puppeteer options used when Chromium is launched. */
   launchOptions?: LaunchOptions;
-
-  /** Optional maximum time Chromium may spend rendering one PDF in milliseconds. */
-  renderTimeoutMs?: number;
 }
 
-/**
- * Describes a font face inserted into the rendered document.
- */
-export interface PdfFont {
-  /** CSS font-family name. */
-  family: string;
-
-  /** Font URL, normally imported from a collocated file with Vite's `?inline` query. */
-  source: string;
-
-  /** Optional CSS font format such as `woff2`. */
-  format?: string;
-
-  /** CSS font-weight descriptor. */
-  weight?: number | string;
-
-  /** CSS font-style descriptor. */
-  style?: string;
-
-  /** CSS font-stretch descriptor. */
-  stretch?: string;
-
-  /** CSS font-display descriptor. */
-  display?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
-
-  /** CSS unicode-range descriptor. */
-  unicodeRange?: string;
-
-  /** CSS font-feature-settings descriptor. */
-  featureSettings?: string;
-
-  /** CSS font-variation-settings descriptor. */
-  variationSettings?: string;
-}
+export type { PdfFont } from './core/config.js';
 
 /**
  * Configures metadata on the generated PDF response.
  */
-export interface PdfResponseOptions {
+export interface PdfResponseOptions extends PdfResponseMetadata {
   /** Additional headers applied to the PDF response. */
   headers?: HeadersInit;
-
-  /** Adds a Content-Disposition header when provided. */
-  disposition?: 'inline' | 'attachment';
-
-  /** Filename used by Content-Disposition. Requires `disposition`. */
-  filename?: string;
 }
 
 /**
