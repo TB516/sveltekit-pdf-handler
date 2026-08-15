@@ -1,6 +1,6 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { Cache, Duration, Effect, Exit, Option } from 'effect';
-import { launch, type Browser, type LaunchOptions } from 'puppeteer';
+import { launch, type Browser } from 'puppeteer';
 import type { Component } from 'svelte';
 import { render } from 'svelte/server';
 
@@ -8,7 +8,9 @@ import {
   BrowserCloseError,
   BrowserLaunchError,
   ComponentRenderError,
+  PdfRenderTimeoutError,
   PdfResponseError,
+  PdfResponderConfigError,
   PdfResponderDisposedError,
 } from './errors.js';
 import { createPdfHtml } from './html.js';
@@ -16,6 +18,7 @@ import { renderPdf } from './render.js';
 import type {
   PdfComponentModule,
   PdfComponentProps,
+  PdfResponderOptions,
   PdfResponseArgs,
   PdfResponseOptions,
 } from './types.js';
@@ -32,9 +35,11 @@ import type {
  * @param args PDF options, component props, and response metadata.
  * @returns The generated PDF response.
  * @throws {PdfResponderDisposedError} The responder has already been disposed.
+ * @throws {PdfResponderConfigError} The responder configuration is invalid.
  * @throws {ComponentRenderError} Svelte could not render the component.
  * @throws {BrowserLaunchError} Puppeteer could not launch Chromium.
  * @throws {PdfRenderError} Puppeteer could not render the PDF document.
+ * @throws {PdfRenderTimeoutError} PDF rendering exceeded the configured time limit.
  * @throws {PdfResponseError} The generated PDF response could not be created.
  */
 export interface PdfResponder {
@@ -69,10 +74,12 @@ export interface PdfResponder {
  * Every call through the returned function reuses the browser while receiving an isolated browser
  * context and page. Calling this factory again creates a separate browser scope.
  *
- * @param launchOptions Puppeteer options used when Chromium is launched.
+ * @param responderOptions Browser launch options and the PDF render timeout.
  * @returns A configured PDF responder function.
  */
-export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfResponder => {
+export const createPdfResponder = (responderOptions: PdfResponderOptions = {}): PdfResponder => {
+  const launchOptions = responderOptions.launchOptions ?? {};
+  const configuredRenderTimeoutMs = responderOptions.renderTimeoutMs;
   const browserCacheKey = 'browser' as const;
   const browserCache = Effect.runSync(
     Cache.makeWith(
@@ -90,6 +97,22 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
   const activeResponses = new Set<Promise<Response>>();
   let disposed = false;
   let disposalPromise: Promise<void> | undefined;
+
+  /**
+   * Validates and returns the optional Chromium render timeout.
+   *
+   * @returns The configured timeout in milliseconds, or undefined when rendering is unbounded.
+   */
+  const validatedRenderTimeoutMs: Effect.Effect<number | undefined, PdfResponderConfigError> =
+    configuredRenderTimeoutMs !== undefined &&
+    (!Number.isFinite(configuredRenderTimeoutMs) || configuredRenderTimeoutMs <= 0)
+      ? Effect.fail(
+          new PdfResponderConfigError({
+            option: 'renderTimeoutMs',
+            value: configuredRenderTimeoutMs,
+          }),
+        )
+      : Effect.succeed(configuredRenderTimeoutMs);
 
   /**
    * Returns the responder's browser, launching or relaunching it when needed.
@@ -140,6 +163,7 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
 
     const responsePromise = Effect.runPromise(
       Effect.gen(function* () {
+        const timeoutMs = yield* validatedRenderTimeoutMs;
         const props = options?.props ?? {};
 
         const { body, head } = yield* Effect.try({
@@ -157,12 +181,22 @@ export const createPdfResponder = (launchOptions: LaunchOptions = {}): PdfRespon
 
         const browser = yield* getBrowser;
 
-        const pdfBytes = yield* renderPdf({
+        const renderEffect = renderPdf({
           browser,
           event,
           html,
           pdfOptions: resolvedOptions.pdf,
         });
+        const timedRenderEffect =
+          timeoutMs === undefined
+            ? renderEffect
+            : renderEffect.pipe(
+                Effect.timeoutOrElse({
+                  duration: Duration.millis(timeoutMs),
+                  orElse: () => Effect.fail(new PdfRenderTimeoutError({ timeoutMs })),
+                }),
+              );
+        const pdfBytes = yield* timedRenderEffect;
 
         const headers = yield* createPdfHeaders(resolvedOptions.response);
 

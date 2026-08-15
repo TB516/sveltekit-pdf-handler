@@ -1,5 +1,16 @@
-import type { PDFOptions } from 'puppeteer';
+import type { LaunchOptions, PDFOptions } from 'puppeteer';
 import type { Component, ComponentProps } from 'svelte';
+
+/**
+ * Configures a PDF responder and its shared browser.
+ */
+export interface PdfResponderOptions {
+  /** Puppeteer options used when Chromium is launched. */
+  launchOptions?: LaunchOptions;
+
+  /** Optional maximum time Chromium may spend rendering one PDF in milliseconds. */
+  renderTimeoutMs?: number;
+}
 
 /**
  * Describes a font face inserted into the rendered document.

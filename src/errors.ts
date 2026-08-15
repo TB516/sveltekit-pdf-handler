@@ -28,11 +28,26 @@ export class PdfRenderError extends Data.TaggedError('PdfRenderError')<{
   override readonly message = 'Failed to render the PDF document';
 }
 
+/** Indicates that PDF rendering exceeded the configured time limit. */
+export class PdfRenderTimeoutError extends Data.TaggedError('PdfRenderTimeoutError')<{
+  readonly timeoutMs: number;
+}> {
+  override readonly message = 'PDF rendering timed out';
+}
+
 /** Indicates that the generated PDF response could not be created. */
 export class PdfResponseError extends Data.TaggedError('PdfResponseError')<{
   readonly cause: unknown;
 }> {
   override readonly message = 'Failed to create the PDF response';
+}
+
+/** Indicates that a PDF responder option is invalid. */
+export class PdfResponderConfigError extends Data.TaggedError('PdfResponderConfigError')<{
+  readonly option: 'renderTimeoutMs';
+  readonly value: number;
+}> {
+  override readonly message = 'The PDF responder configuration is invalid';
 }
 
 /** Indicates that a PDF generation was requested after its responder was disposed. */

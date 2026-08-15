@@ -103,15 +103,16 @@ generation runs, whether that is the build environment or the deployed server.
 
 ## API
 
-### `createPdfResponder(options?: LaunchOptions): PdfResponder`
+### `createPdfResponder(options?: PdfResponderOptions): PdfResponder`
 
 Creates a responder backed by one lazily launched browser. Calls through the same responder reuse
 that browser while receiving isolated browser contexts and pages. Calling `createPdfResponder`
 again creates a separate browser scope.
 
-The optional argument is passed directly to Puppeteer. See Puppeteer's
+Pass Puppeteer launch settings through `options.launchOptions`. See Puppeteer's
 [`LaunchOptions`](https://pptr.dev/api/puppeteer.launchoptions) documentation for all available
-settings.
+settings. Chromium PDF rendering has no timeout by default. Set `options.renderTimeoutMs` to a
+finite positive number to limit rendering in milliseconds.
 
 The returned responder also provides `dispose(): Promise<void>` and implements
 `Symbol.asyncDispose`. Disposal rejects new renders, waits for already accepted renders to settle,
@@ -124,7 +125,7 @@ disposing the previous responder:
 let createPdfResponse = createPdfResponder();
 
 const previous = createPdfResponse;
-createPdfResponse = createPdfResponder(newLaunchOptions);
+createPdfResponse = createPdfResponder({ launchOptions: newLaunchOptions });
 await previous.dispose();
 ```
 
@@ -142,7 +143,9 @@ Chromium to run without its sandbox can use a shared server-only module:
 import { createPdfResponder } from 'sveltekit-pdf-renderer';
 
 export const createPdfResponse = createPdfResponder({
-  args: process.env.CI === 'true' ? ['--no-sandbox'] : [],
+  launchOptions: {
+    args: process.env.CI === 'true' ? ['--no-sandbox'] : [],
+  },
 });
 ```
 
