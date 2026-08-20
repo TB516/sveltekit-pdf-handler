@@ -28,10 +28,12 @@ export const createBrowserManager = (launchOptions: LaunchOptions): Effect.Effec
     const browserCacheKey = 'browser' as const;
     const browserCache = yield* Cache.makeWith(
       () =>
-        Effect.tryPromise({
-          try: () => launch(launchOptions),
-          catch: (cause) => new BrowserLaunchError({ cause }),
-        }),
+        Effect.uninterruptible(
+          Effect.tryPromise({
+            try: () => launch(launchOptions),
+            catch: (cause) => new BrowserLaunchError({ cause }),
+          }),
+        ),
       {
         capacity: 1,
         timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
