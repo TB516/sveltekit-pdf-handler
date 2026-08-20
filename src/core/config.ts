@@ -69,10 +69,10 @@ export const PdfGenerationConfigSchema = Schema.Struct({
 /** Validates configuration owned by the PDF responder. */
 export const ResponderConfigSchema = Schema.Struct({
   /** Maximum number of PDF generations allowed to run concurrently. */
-  maxConcurrentGenerations: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  maxConcurrentGenerations: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
 
   /** Maximum duration of one complete Puppeteer rendering operation in milliseconds. */
-  renderTimeoutMs: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))),
+  renderTimeoutMs: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
 });
 
 /** Configuration values owned and validated by the PDF responder. */

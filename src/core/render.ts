@@ -43,7 +43,7 @@ export const renderPdf = ({
    */
   const handleAssetRequest = (request: HTTPRequest): Effect.Effect<void> =>
     Effect.tryPromise({
-      try: async () => {
+      try: async (signal) => {
         const requestUrl = new URL(request.url());
 
         if (requestUrl.origin !== event.url.origin) {
@@ -51,7 +51,7 @@ export const renderPdf = ({
           return;
         }
 
-        const assetResponse = await event.fetch(requestUrl);
+        const assetResponse = await event.fetch(requestUrl, { signal });
 
         await request.respond({
           status: assetResponse.status,
@@ -110,11 +110,11 @@ export const renderPdf = ({
           () =>
             Effect.gen(function* () {
               yield* Effect.tryPromise({
-                try: () => page.setContent(html, { waitUntil: 'load' }),
+                try: (signal) => page.setContent(html, { signal, waitUntil: 'load' }),
                 catch: (cause) => new PdfRenderError({ cause }),
               });
               yield* Effect.tryPromise({
-                try: () => page.waitForNetworkIdle(),
+                try: (signal) => page.waitForNetworkIdle({ signal }),
                 catch: (cause) => new PdfRenderError({ cause }),
               });
 

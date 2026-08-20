@@ -66,10 +66,9 @@ export const createPdfResponder = (
   responderOptions: PdfResponderOptions = {},
 ): Effect.Effect<PdfResponder, PdfResponderConfigError> =>
   Effect.gen(function* () {
-    const config = yield* Schema.decodeUnknownEffect(ResponderConfigSchema)({
-      maxConcurrentGenerations: responderOptions.maxConcurrentGenerations,
-      renderTimeoutMs: responderOptions.renderTimeoutMs,
-    }).pipe(Effect.mapError((cause) => new PdfResponderConfigError({ cause })));
+    const config = yield* Schema.decodeUnknownEffect(ResponderConfigSchema)(responderOptions).pipe(
+      Effect.mapError((cause) => new PdfResponderConfigError({ cause })),
+    );
 
     const browserManager = yield* createBrowserManager(responderOptions.launchOptions ?? {});
 
@@ -77,7 +76,7 @@ export const createPdfResponder = (
       config.maxConcurrentGenerations === undefined
         ? undefined
         : yield* Semaphore.make(config.maxConcurrentGenerations);
-    const activeResponses = new Set<Deferred.Deferred<void>>();
+    const pendingGenerations = new Set<Deferred.Deferred<void>>();
     let disposed = false;
 
     /** Generates and tracks one PDF response. */
@@ -94,31 +93,58 @@ export const createPdfResponder = (
             return yield* new PdfResponderDisposedError();
           }
 
-          activeResponses.add(completed);
+          pendingGenerations.add(completed);
           return completed;
         }),
-        () =>
-          createResponse(config.renderTimeoutMs, event, componentModule, ...args).pipe(
-            Effect.provideService(BrowserManager, browserManager),
-          ),
+        () => {
+          const response = createResponse(
+            config.renderTimeoutMs,
+            event,
+            componentModule,
+            ...args,
+          ).pipe(Effect.provideService(BrowserManager, browserManager));
+
+          return semaphore === undefined ? response : semaphore.withPermit(response);
+        },
         (completed) =>
           Effect.gen(function* () {
-            activeResponses.delete(completed);
+            pendingGenerations.delete(completed);
             yield* Deferred.succeed(completed, undefined);
           }),
       );
 
-      return semaphore === undefined ? generation : semaphore.withPermit(generation);
+      const requestSignal = event.request.signal;
+      const requestAborted = Effect.callback<never>((resume) => {
+        const interrupt = (): void => {
+          resume(Effect.interrupt);
+        };
+
+        if (requestSignal.aborted) {
+          interrupt();
+          return;
+        }
+
+        requestSignal.addEventListener('abort', interrupt, { once: true });
+        return Effect.sync(() => requestSignal.removeEventListener('abort', interrupt));
+      });
+
+      return Effect.gen(function* () {
+        if (disposed) {
+          return yield* new PdfResponderDisposedError();
+        }
+
+        return yield* Effect.raceFirst(generation, requestAborted);
+      });
     };
 
     /** Drains accepted responses and closes the browser. */
     const dispose = Effect.gen(function* () {
-      const active = yield* Effect.sync(() => {
+      const pending = yield* Effect.sync(() => {
         disposed = true;
-        return [...activeResponses];
+        return [...pendingGenerations];
       });
 
-      yield* Effect.all(active.map(Deferred.await), { concurrency: 'unbounded' });
+      yield* Effect.all(pending.map(Deferred.await), { concurrency: 'unbounded' });
       yield* browserManager.closeBrowser;
     });
 

@@ -74,9 +74,7 @@ export const createPdfResponder = (responderOptions: PdfResponderOptions = {}): 
     componentModule: PdfComponentModule<ComponentType>,
     ...args: PdfResponseArgs<PdfComponentProps<ComponentType>>
   ): Promise<Response> =>
-    Effect.runPromise(nativeResponder(event, componentModule, ...args), {
-      signal: event.request.signal,
-    })) as PdfResponder;
+    Effect.runPromise(nativeResponder(event, componentModule, ...args))) as PdfResponder;
 
   const dispose = (): Promise<void> => Effect.runPromise(nativeResponder.dispose);
 

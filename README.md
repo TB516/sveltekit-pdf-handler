@@ -119,6 +119,10 @@ Set `options.maxConcurrentGenerations` to a positive integer to limit how many P
 generates at once. Additional calls wait for capacity and remain cancellable. Leaving it unset does
 not limit concurrency.
 
+Aborting a SvelteKit request interrupts its queued or active PDF generation. Cancellation also
+stops cancellable asset loading and Puppeteer waits, then closes the generation's isolated browser
+context.
+
 The returned responder also provides `dispose(): Promise<void>` and implements
 `Symbol.asyncDispose`. Disposal rejects new renders, waits for already accepted renders to settle,
 and then closes the responder's browser. It is safe to call more than once.
