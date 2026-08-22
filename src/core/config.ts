@@ -68,6 +68,9 @@ export const PdfGenerationConfigSchema = Schema.Struct({
 
 /** Validates configuration owned by the PDF responder. */
 export const ResponderConfigSchema = Schema.Struct({
+  /** Number of times to retry a failed Chromium launch. */
+  browserLaunchRetries: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+
   /** Maximum number of PDF generations allowed to run concurrently. */
   maxConcurrentGenerations: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
 

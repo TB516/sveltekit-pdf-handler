@@ -1,4 +1,4 @@
-import { Cache, Context, Duration, Effect, Exit, Option } from 'effect';
+import { Cache, Context, Duration, Effect, Exit, Option, Schedule } from 'effect';
 import { launch, type Browser, type LaunchOptions } from 'puppeteer';
 
 import { BrowserCloseError, BrowserLaunchError } from '../errors.js';
@@ -21,18 +21,26 @@ export const BrowserManager = Context.Service<BrowserManager>(
  * Creates the shared browser operations used by one PDF responder.
  *
  * @param launchOptions Puppeteer options used when Chromium is launched.
+ * @param launchRetries Number of retries allowed after a failed browser launch.
  * @returns Operations for acquiring and closing the responder's browser.
  */
-export const createBrowserManager = (launchOptions: LaunchOptions): Effect.Effect<BrowserManager> =>
+export const createBrowserManager = (
+  launchOptions: LaunchOptions,
+  launchRetries: number,
+): Effect.Effect<BrowserManager> =>
   Effect.gen(function* () {
     const browserCacheKey = 'browser' as const;
     const browserCache = yield* Cache.makeWith(
       () =>
-        Effect.uninterruptible(
-          Effect.tryPromise({
-            try: () => launch(launchOptions),
-            catch: (cause) => new BrowserLaunchError({ cause }),
+        Effect.tryPromise({
+          try: () => launch(launchOptions),
+          catch: (cause) => new BrowserLaunchError({ cause }),
+        }).pipe(
+          Effect.retry({
+            schedule: Schedule.exponential('200 millis'),
+            times: launchRetries,
           }),
+          Effect.uninterruptible,
         ),
       {
         capacity: 1,

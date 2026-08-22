@@ -111,7 +111,10 @@ again creates a separate browser scope.
 
 Pass Puppeteer launch settings through `options.launchOptions`. See Puppeteer's
 [`LaunchOptions`](https://pptr.dev/api/puppeteer.launchoptions) documentation for all available
-settings. Puppeteer applies its own timeouts to individual operations. Set
+settings. Set `options.browserLaunchRetries` to a non-negative integer to retry failed browser
+launches with exponential backoff. The value excludes the initial attempt and defaults to `0`.
+
+Puppeteer applies its own timeouts to individual operations. Set
 `options.renderTimeoutMs` to a finite positive number to add an overall deadline, in milliseconds,
 for each PDF rendering operation.
 

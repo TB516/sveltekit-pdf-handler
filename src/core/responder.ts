@@ -73,7 +73,10 @@ export const createPdfResponder = (
       Effect.mapError((cause) => new PdfResponderConfigError({ cause })),
     );
 
-    const browserManager = yield* createBrowserManager(responderOptions.launchOptions ?? {});
+    const browserManager = yield* createBrowserManager(
+      responderOptions.launchOptions ?? {},
+      config.browserLaunchRetries ?? 0,
+    );
 
     const semaphore =
       config.maxConcurrentGenerations === undefined
