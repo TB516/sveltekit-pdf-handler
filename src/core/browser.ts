@@ -22,11 +22,13 @@ export const BrowserManager = Context.Service<BrowserManager>(
  *
  * @param launchOptions Puppeteer options used when Chromium is launched.
  * @param launchRetries Number of retries allowed after a failed browser launch.
+ * @param launchRetryMaxDelayMs Maximum delay between retries in milliseconds.
  * @returns Operations for acquiring and closing the responder's browser.
  */
 export const createBrowserManager = (
   launchOptions: LaunchOptions,
   launchRetries = 0,
+  launchRetryMaxDelayMs?: number,
 ): Effect.Effect<BrowserManager> =>
   Effect.gen(function* () {
     const browserCacheKey = 'browser' as const;
@@ -37,7 +39,10 @@ export const createBrowserManager = (
           catch: (cause) => new BrowserLaunchError({ cause }),
         }).pipe(
           Effect.retry({
-            schedule: Schedule.exponential('200 millis'),
+            schedule: Schedule.min([
+              Schedule.exponential('200 millis').pipe(Schedule.jittered),
+              Schedule.spaced(launchRetryMaxDelayMs ?? Duration.infinity),
+            ]),
             times: launchRetries,
           }),
           Effect.uninterruptible,
