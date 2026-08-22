@@ -49,11 +49,13 @@ const PdfResponseMetadataSchema = Schema.Struct({
   /** Filename used by Content-Disposition. Requires `disposition`. */
   filename: Schema.optionalKey(Schema.NonEmptyString),
 }).check(
-  Schema.makeFilter((metadata) =>
-    metadata.filename === undefined || metadata.disposition !== undefined
-      ? undefined
-      : { path: ['filename'], issue: 'filename requires disposition' },
-  ),
+  Schema.makeFilter((metadata) => {
+    if (metadata.filename !== undefined && metadata.disposition === undefined) {
+      return { path: ['filename'], issue: 'filename requires disposition' };
+    }
+
+    return;
+  }),
 );
 
 /** Validated metadata owned by a generated PDF response. */

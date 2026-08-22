@@ -43,14 +43,17 @@ const createPdfHeaders = (
 
     headers.set('content-type', 'application/pdf');
 
-    if (options?.disposition !== undefined) {
-      const filename =
-        options.filename === undefined
-          ? ''
-          : `; filename*=UTF-8''${yield* encodeHeaderFilename(options.filename)}`;
-
-      headers.set('content-disposition', `${options.disposition}${filename}`);
+    if (options?.disposition === undefined) {
+      return headers;
     }
+
+    if (options.filename === undefined) {
+      headers.set('content-disposition', options.disposition);
+      return headers;
+    }
+
+    const filename = yield* encodeHeaderFilename(options.filename);
+    headers.set('content-disposition', `${options.disposition}; filename*=UTF-8''${filename}`);
 
     return headers;
   });

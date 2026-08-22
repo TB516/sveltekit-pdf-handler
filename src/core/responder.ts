@@ -110,7 +110,11 @@ export const createPdfResponder = (
             ...args,
           ).pipe(Effect.provideService(BrowserManager, browserManager));
 
-          return semaphore === undefined ? response : semaphore.withPermit(response);
+          if (!semaphore) {
+            return response;
+          }
+
+          return semaphore.withPermit(response);
         },
         (completed) =>
           Effect.gen(function* () {

@@ -80,14 +80,15 @@ export const createBrowserManager = (
         Effect.catchTag('BrowserLaunchError', () => Effect.succeedNone),
       );
 
-      if (Option.isSome(cachedBrowser)) {
-        yield* Effect.tryPromise({
-          try: () => cachedBrowser.value.close(),
-          catch: (cause) => new BrowserCloseError({ cause }),
-        }).pipe(Effect.ensuring(Cache.invalidate(browserCache, browserCacheKey)));
-      } else {
+      if (Option.isNone(cachedBrowser)) {
         yield* Cache.invalidate(browserCache, browserCacheKey);
+        return;
       }
+
+      yield* Effect.tryPromise({
+        try: () => cachedBrowser.value.close(),
+        catch: (cause) => new BrowserCloseError({ cause }),
+      }).pipe(Effect.ensuring(Cache.invalidate(browserCache, browserCacheKey)));
     });
 
     return { closeBrowser, getBrowser };
