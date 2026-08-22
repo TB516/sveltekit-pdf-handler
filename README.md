@@ -119,6 +119,10 @@ Set `options.maxConcurrentGenerations` to a positive integer to limit how many P
 generates at once. Additional calls wait for capacity and remain cancellable. Leaving it unset does
 not limit concurrency.
 
+Call `responder.getPendingGenerations()` to inspect how many queued or active generations the
+responder currently owns. This is an advisory snapshot that can be used when routing work between
+multiple responders.
+
 Aborting a SvelteKit request interrupts its queued or active PDF generation. Cancellation also
 stops cancellable asset loading and Puppeteer waits, then closes the generation's isolated browser
 context.

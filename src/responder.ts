@@ -37,6 +37,9 @@ export interface PdfResponder {
     ...args: PdfResponseArgs<PdfComponentProps<ComponentType>>
   ): Promise<Response>;
 
+  /** Returns the number of queued or active generations currently owned by this responder. */
+  getPendingGenerations(): number;
+
   /**
    * Waits for accepted renders to settle and then closes this responder's browser.
    *
@@ -78,8 +81,11 @@ export const createPdfResponder = (responderOptions: PdfResponderOptions = {}): 
 
   const dispose = (): Promise<void> => Effect.runPromise(nativeResponder.dispose);
 
-  responder.dispose = dispose;
-  responder[Symbol.asyncDispose] = dispose;
+  Object.assign(responder, {
+    dispose,
+    getPendingGenerations: (): number => nativeResponder.getPendingGenerations(),
+    [Symbol.asyncDispose]: dispose,
+  });
 
   return responder;
 };

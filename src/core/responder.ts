@@ -52,6 +52,9 @@ export interface PdfResponder {
     ...args: PdfResponseArgs<PdfComponentProps<ComponentType>>
   ): Effect.Effect<Response, PdfGenerationError>;
 
+  /** Returns the number of queued or active generations currently owned by this responder. */
+  getPendingGenerations(): number;
+
   /** Completes after accepted responses settle and the browser closes. */
   readonly dispose: Effect.Effect<void, BrowserCloseError>;
 }
@@ -150,5 +153,6 @@ export const createPdfResponder = (
 
     return Object.assign(respond, {
       dispose: yield* Effect.cached(Effect.uninterruptible(dispose)),
+      getPendingGenerations: (): number => pendingGenerations.size,
     });
   });
