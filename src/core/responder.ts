@@ -75,7 +75,7 @@ export const createPdfResponder = (
 
     const browserManager = yield* createBrowserManager(
       responderOptions.launchOptions ?? {},
-      config.browserLaunchRetries ?? 0,
+      config.browserLaunchRetries,
     );
 
     const semaphore =

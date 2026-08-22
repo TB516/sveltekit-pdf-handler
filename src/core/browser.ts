@@ -26,7 +26,7 @@ export const BrowserManager = Context.Service<BrowserManager>(
  */
 export const createBrowserManager = (
   launchOptions: LaunchOptions,
-  launchRetries: number,
+  launchRetries = 0,
 ): Effect.Effect<BrowserManager> =>
   Effect.gen(function* () {
     const browserCacheKey = 'browser' as const;
@@ -90,5 +90,5 @@ export const createBrowserManager = (
       }
     });
 
-    return { closeBrowser, getBrowser } as const;
+    return { closeBrowser, getBrowser };
   });
